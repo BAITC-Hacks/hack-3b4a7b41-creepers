@@ -19,7 +19,7 @@ async def workflow(client):
         result = response.json()
         if result["error"]:
             print(json.dumps({"error": result["error"]["code"]}))
-            raise RuntimeError("Demo cannot continue; configure and validate the real EKT adapter first.")
+            raise RuntimeError("Demo cannot continue; check the reported API error.")
         print(json.dumps({"intent": result["intent"], "products": len(result["products"]),
                           "pending": result["pending_confirmation"] is not None,
                           "cart_items": result["cart"]["total_items"] if result["cart"] else 0}))

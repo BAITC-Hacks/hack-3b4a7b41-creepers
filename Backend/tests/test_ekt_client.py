@@ -88,12 +88,12 @@ async def test_malformed_json():
         await client.close()
 
 
-async def test_unverified_real_schema_fails_closed():
+async def test_unknown_real_schema_fails_closed():
     client = EktClient(settings(), transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"id": "fake"})))
     try:
         with pytest.raises(AppError) as error:
             await client.get_products()
-        assert error.value.code == "ekt_schema_unverified"
+        assert error.value.code == "ekt_invalid_product"
     finally:
         await client.close()
 

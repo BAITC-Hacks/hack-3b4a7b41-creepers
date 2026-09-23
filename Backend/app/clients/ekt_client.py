@@ -1,15 +1,20 @@
 """The sole boundary for EKT transport and wire-format normalization.
 
-No EKT JSON fields have been verified yet: credentials were not supplied.
-The adapter deliberately fails closed until real responses are inspected.
-Do not replace this guard with guessed field aliases or synthetic stock.
+Wire models verified against authenticated EKT responses on 2026-09-23.
+Lists contain items/page/per_page/count; detail quantity is the stock total.
+count is the returned page size, not a catalog total. Out-of-range pages can
+repeat page one, so search detects repeated product IDs and remains partial.
 """
 import asyncio
 import re
 import time
+from decimal import Decimal
+from html import unescape
 from typing import Any, Protocol
+from urllib.parse import urlsplit
 
 import httpx
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.config import Settings
 from app.core.errors import AppError
@@ -21,21 +26,124 @@ class CatalogAdapter(Protocol):
     def parse_detail(self, payload: Any) -> Product: ...
 
 
-class EktResponseAdapter:
-    """Mapping is intentionally blocked pending authenticated API inspection."""
+class EktListItem(BaseModel):
+    model_config = ConfigDict(extra="ignore", allow_inf_nan=False, hide_input_in_errors=True)
+    id: int = Field(strict=True, gt=0)
+    name: str = Field(min_length=1)
+    article: str | None = None
+    price: Decimal | None = Field(default=None, ge=0)
+    image: str | None = None
+    url: str | None = None
+    offers: list[Any] = Field(default_factory=list)
 
-    @staticmethod
-    def _unverified():
-        raise AppError(
-            "ekt_schema_unverified",
-            "Формат каталога EKT ещё не проверен на реальном API.", 503,
+    @field_validator("price", mode="before")
+    @classmethod
+    def validate_price(cls, value):
+        if isinstance(value, bool):
+            raise ValueError("Boolean is not a price")
+        return value
+
+
+class EktDetail(EktListItem):
+    description: str | None = None
+    quantity: Decimal | None = Field(default=None, ge=0)
+    # Store quantities are not added: EKT supplies its own total in quantity.
+    stores: list[dict[str, Any]] = Field(default_factory=list)
+    properties: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("quantity", mode="before")
+    @classmethod
+    def validate_quantity(cls, value):
+        if isinstance(value, bool):
+            raise ValueError("Boolean is not stock")
+        return value
+
+
+class EktPage(BaseModel):
+    model_config = ConfigDict(extra="ignore", hide_input_in_errors=True)
+    page: int = Field(strict=True, ge=1)
+    per_page: int = Field(strict=True, ge=1)
+    count: int = Field(strict=True, ge=0)
+    items: list[EktListItem]
+
+    @model_validator(mode="after")
+    def validate_count(self):
+        if self.count != len(self.items) or self.count > self.per_page:
+            raise ValueError("Inconsistent page count")
+        return self
+
+
+# Only properties actually observed with this meaning are given display labels.
+SPECIFICATION_LABELS = {
+    "KOLICHESTVO_POLYUSOV": "Количество полюсов",
+    "NOMINALNAYA_OTKLYUCHAYUSHCHAYA_SPOSOBNOST": "Номинальная отключающая способность",
+    "NOMINALNOE_NAPRYAZHENIE": "Номинальное напряжение",
+    "NOMINALNYY_TOK": "Номинальный ток",
+    "TIP_USTANOVKI": "Тип установки",
+    "TORGOVAYA_MARKA": "Торговая марка",
+    "NAZNACHENIE": "Назначение",
+    "TIP_USTROYSTVA": "Тип устройства",
+    "KHARAKTERISTIKA_SRABATYVANIYA": "Характеристика срабатывания",
+}
+
+
+def _ekt_url(value: str | None) -> str | None:
+    if not value:
+        return None
+    parsed = urlsplit(value)
+    if (parsed.scheme != "https" or parsed.hostname not in {"ekt.kz", "www.ekt.kz"}
+            or parsed.username or parsed.password):
+        return None
+    return value
+
+
+def _amp_ratings(value: str) -> set[Decimal]:
+    return {Decimal(match.replace(",", ".")) for match in
+            re.findall(r"(?<![\w.,])([0-9]+(?:[.,][0-9]+)?)\s*[aа]\b", value.casefold())}
+
+
+class EktResponseAdapter:
+    """Normalize verified fields only; preserve conflicts instead of guessing."""
+
+    def _product(self, item: EktListItem) -> Product:
+        url = _ekt_url(item.url)
+        category = None
+        if url:
+            parts = urlsplit(url).path.strip("/").split("/")
+            if len(parts) >= 3 and parts[0] == "catalog":
+                category = "/".join(parts[1:-1])
+        specs = {}
+        warnings = []
+        if isinstance(item, EktDetail):
+            for key, label in SPECIFICATION_LABELS.items():
+                value = item.properties.get(key)
+                if isinstance(value, str) and value.strip():
+                    specs[label] = unescape(value.strip())
+            name_ratings = _amp_ratings(item.name)
+            property_ratings = _amp_ratings(specs.get("Номинальный ток", ""))
+            if name_ratings and property_ratings and name_ratings != property_ratings:
+                warnings.append("Номинальный ток в названии и свойствах каталога различается. Уточните характеристику у поставщика.")
+        if item.offers:
+            warnings.append("Товар содержит варианты исполнения. Их остатки и цены отдельно не нормализованы.")
+        return Product(
+            id=str(item.id), article=item.article or None, name=unescape(item.name),
+            category=category, category_source="catalog_url" if category else None,
+            description=unescape(item.description) if isinstance(item, EktDetail) and item.description else None,
+            product_url=url, image_url=_ekt_url(item.image), specifications=specs,
+            price=item.price, stock=item.quantity if isinstance(item, EktDetail) and not item.offers else None,
+            # No currency or certificate fields were present in the inspected API.
+            data_warnings=warnings,
         )
 
     def parse_page(self, payload: Any, page: int) -> CatalogPage:
-        return self._unverified()
+        result = EktPage.model_validate(payload)
+        if result.page != page:
+            raise ValueError("Requested and received pages differ")
+        return CatalogPage(products=[self._product(item) for item in result.items], page=page,
+                           has_next=False if not result.items else None)
 
     def parse_detail(self, payload: Any) -> Product:
-        return self._unverified()
+        return self._product(EktDetail.model_validate(payload))
 
 
 def search_tokens(value: str) -> list[str]:
@@ -50,8 +158,13 @@ def matches_query(product: Product, query: str) -> bool:
         + [f"{key} {value}" for key, value in product.specifications.items()]
     )))
     # A request for 25A must not match 125A or 250A.
-    return all((re.search(r"(?<!\w)" + re.escape(token) + r"(?!\w)", haystack) is not None)
-               if token[0].isdigit() else token in haystack for token in search_tokens(query))
+    def matches(token):
+        if token.startswith("автомат") and re.search(r"\b(?:ав|ва|ba)\b", product.name.casefold()):
+            return True
+        if token[0].isdigit():
+            return re.search(r"(?<!\w)" + re.escape(token) + r"(?!\w)", haystack) is not None
+        return token in haystack
+    return all(matches(token) for token in search_tokens(query))
 
 
 class EktClient:
@@ -134,6 +247,7 @@ class EktClient:
         products: dict[str, Product] = {}
         partial = True
         scanned = 0
+        seen: set[str] = set()
         # One bounded scan at a time; concurrent callers reuse cached pages.
         try:
             async with asyncio.timeout(self.settings.catalog_search_timeout_seconds):
@@ -141,6 +255,11 @@ class EktClient:
                     for page in range(1, self.settings.catalog_max_pages + 1):
                         result = await self._cached_page(page)
                         scanned += 1
+                        identifiers = {product.id for product in result.products}
+                        if identifiers and identifiers <= seen:
+                            # EKT repeats page one for out-of-range page numbers.
+                            break
+                        seen.update(identifiers)
                         for product in result.products:
                             if matches_query(product, query):
                                 products[product.id] = product

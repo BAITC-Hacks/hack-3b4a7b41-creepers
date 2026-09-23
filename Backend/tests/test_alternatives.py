@@ -32,6 +32,12 @@ def test_no_alternative_without_comparable_data(client):
     assert client.get("/api/products/515295/alternatives").json()["alternatives"] == []
 
 
+def test_rating_whitespace_is_not_a_technical_conflict(catalog):
+    source = catalog.products["515293"].model_copy(deep=True)
+    source.specifications["Номинальный ток"] = "25 А"
+    assert similarity(source, catalog.products["515291"]) is not None
+
+
 def test_search_failure_preserves_known_product(client, catalog):
     from app.core.errors import AppError
     async def unavailable(query):

@@ -65,6 +65,8 @@ class Assistant:
                         text += " Взаимозаменяемость требует проверки."
                     if partial:
                         text += " Проверена только часть возможных альтернатив."
+                    if product.data_warnings:
+                        text += " " + " ".join(product.data_warnings)
                     return ChatResponse(intent=decision.intent, message=text, products=[product], alternatives=alternatives)
                 return ChatResponse(intent=decision.intent, message="Могу найти товар, проверить наличие, характеристики и сертификаты. Укажите название или ID.")
         except AppError as exc:
