@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import health, products, chat
+from app.api import health, products, chat, cart
 from app.agents.assistant import Assistant
 from app.agents.tools import AssistantTools
 from app.clients.ekt_client import EktClient
@@ -15,6 +15,8 @@ from app.core.logging import configure_logging
 from app.services.product_service import ProductService
 from app.services.alternative_service import AlternativeService
 from app.services.session_service import SessionService
+from app.services.stock_service import StockService
+from app.services.cart_service import CartService
 from app.schemas.chat import ChatResponse
 from app.core.errors import ErrorInfo
 
@@ -31,8 +33,11 @@ def create_app(settings: Settings | None = None, *, ekt_client=None) -> FastAPI:
         application.state.products = ProductService(client)
         application.state.alternatives = AlternativeService(application.state.products)
         application.state.sessions = SessionService(settings)
+        application.state.stock = StockService(application.state.products)
+        application.state.cart = CartService(application.state.stock, settings)
         application.state.assistant = Assistant(AssistantTools(
             application.state.products, application.state.alternatives, application.state.sessions,
+            application.state.cart,
         ))
         try:
             yield
@@ -63,6 +68,7 @@ def create_app(settings: Settings | None = None, *, ekt_client=None) -> FastAPI:
     application.include_router(health.router)
     application.include_router(products.router)
     application.include_router(chat.router)
+    application.include_router(cart.router)
     return application
 
 

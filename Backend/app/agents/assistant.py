@@ -12,6 +12,20 @@ class Assistant:
         decision = classify(message)
         try:
             async with self.tools.sessions.use(session_id) as session:
+                if decision.intent == "cancel_cart_action":
+                    self.tools.cart.cancel(session)
+                    return ChatResponse(intent=decision.intent, message="Ожидающее добавление отменено.", cart=self.tools.cart.view(session))
+                if decision.intent == "add_to_cart_confirm":
+                    cart = await self.tools.cart.confirm(session)
+                    return ChatResponse(intent=decision.intent, message="Товар добавлен в локальную демонстрационную корзину.", cart=cart, checkout_url=cart.checkout_url)
+                if decision.intent == "add_to_cart_prepare":
+                    if decision.quantity is None:
+                        return ChatResponse(intent=decision.intent, message="Укажите количество, например «добавь 5 штук».")
+                    product_id = self.tools.sessions.selected(session, decision.product_id)
+                    pending = await self.tools.cart.prepare(session, product_id, decision.quantity)
+                    self.tools.sessions.remember(session, [pending.product])
+                    return ChatResponse(intent=decision.intent, message=pending.message, products=[pending.product],
+                                        pending_confirmation=pending, cart=self.tools.cart.view(session))
                 if decision.intent in {"payment_info", "delivery_info", "minimum_order"}:
                     return ChatResponse(intent=decision.intent, message=self.tools.conditions.answer(decision.intent))
                 if decision.intent == "product_search":
