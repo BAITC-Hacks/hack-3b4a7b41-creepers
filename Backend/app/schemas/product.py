@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 class Product(BaseModel):
     """Internal contract, not a claim about the uninspected EKT wire format."""
 
-    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False, validate_assignment=True)
     id: str = Field(min_length=1, max_length=200)
     article: str | None = None
     name: str = Field(min_length=1)
