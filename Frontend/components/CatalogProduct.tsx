@@ -9,6 +9,8 @@ export default function CatalogProduct({
   onPrepare,
   onDetail,
   onAlternatives,
+  onCompare,
+  onCertificate,
   reason,
 }: {
   product: Product;
@@ -16,6 +18,8 @@ export default function CatalogProduct({
   onPrepare: (p: Product, quantity: number) => void;
   onDetail: (p: Product) => void;
   onAlternatives: (p: Product) => void;
+  onCompare: (p: Product) => void;
+  onCertificate: (p: Product) => void;
   reason?: string;
 }) {
   const [quantity, setQuantity] = useState(1);
@@ -55,6 +59,12 @@ export default function CatalogProduct({
             {stockText}
           </span>
         </div>
+      </div>
+      <div className="product-source">
+        <Icon name="shield" size={12} />{" "}
+        {p.source === "demo_catalog"
+          ? "Источник: учебный каталог"
+          : "Источник: каталог EKT"}
       </div>
       {reason && (
         <div className="match-reason">
@@ -126,6 +136,17 @@ export default function CatalogProduct({
           Обновить данные товара
         </button>
       </details>
+      <div className="card-tool-buttons">
+        <button disabled={busy} onClick={() => onCertificate(p)}>
+          Сертификат
+        </button>
+        <button disabled={busy} onClick={() => onAlternatives(p)}>
+          Найти аналог
+        </button>
+        <button disabled={busy} onClick={() => onCompare(p)}>
+          Сравнить
+        </button>
+      </div>
       <div className="product-footer">
         <strong>{money(p)}</strong>
         {available ? (

@@ -14,6 +14,7 @@ export type Product = {
   stock: string | number | null;
   availability: "in_stock" | "out_of_stock" | "unknown";
   data_warnings: string[];
+  source: "ekt_catalog" | "demo_catalog";
 };
 export type Cart = {
   items: { product: Product; quantity: number }[];
@@ -42,6 +43,38 @@ export type Status = {
   policies: Record<string, string>;
   policy_source: string;
   policy_checked_at: string;
+};
+export type ProcurementRow = {
+  query: string;
+  requested: number;
+  product: Product | null;
+  candidates: Product[];
+  available: number | null;
+  missing: number | null;
+  status: string;
+  alternatives: { product: Product; reason: string }[];
+  note: string;
+};
+export type ProcurementReport = {
+  rows: ProcurementRow[];
+  positions: number;
+  requested: number;
+  available: number;
+  missing: number;
+  complete_positions: number;
+  shortage_positions: number;
+  unresolved_positions: number;
+  truncated: boolean;
+  source: "ekt_catalog" | "demo_catalog";
+  message: string;
+};
+export type Attachment = {
+  filename: string;
+  message: string;
+  extracted_text?: string;
+  procurement?: ProcurementReport | null;
+  candidates: Product[];
+  demo_recognition: boolean;
 };
 export async function api<T>(
   mode: Mode,
@@ -76,6 +109,10 @@ export async function api<T>(
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError")
       throw new Error("Ответ занимает больше 30 секунд. Повторите запрос.");
+    if (error instanceof TypeError)
+      throw new Error(
+        "Не удалось связаться с сервисом. Проверьте подключение и повторите запрос.",
+      );
     throw error;
   } finally {
     clearTimeout(timer);

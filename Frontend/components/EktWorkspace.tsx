@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import Icon, { type IconName } from "./Icon";
 import CatalogProduct from "./CatalogProduct";
+import ProductComparison from "./ProductComparison";
+import ProcurementSummary from "./ProcurementSummary";
 import {
   api,
   cartLink,
@@ -13,6 +15,8 @@ import {
   type Product,
   type Reply,
   type Status,
+  type Attachment,
+  type ProcurementReport,
 } from "@/lib/workspace-api";
 
 type Message = {
@@ -21,6 +25,7 @@ type Message = {
   text: string;
   products?: Product[];
   alternatives?: Reply["alternatives"];
+  intent?: string;
 };
 type Tab = "chat" | "catalog" | "conditions";
 const navigation: { id: Tab; icon: IconName; label: string }[] = [
@@ -41,13 +46,18 @@ export default function EktWorkspace({ mode }: { mode: Mode }) {
   const [pending, setPending] = useState<Pending | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Product[] | null>(null);
+  const [catalogPage, setCatalogPage] = useState<number | null>(null);
+  const [hasNextPage, setHasNextPage] = useState(false);
   const [searchNote, setSearchNote] = useState("");
   const [elapsed, setElapsed] = useState<number | null>(null);
-  const [attachment, setAttachment] = useState<{
-    filename: string;
-    message: string;
-    extracted_text?: string;
-  } | null>(null);
+  const [attachment, setAttachment] = useState<Attachment | null>(null);
+  const [report, setReport] = useState<ProcurementReport | null>(null);
+  const [comparison, setComparison] = useState<Product[]>([]);
+  const [queue, setQueue] = useState<{ product: Product; quantity: number }[]>(
+    [],
+  );
+  const [activity, setActivity] = useState("Проверяю данные каталога…");
+  const [retry, setRetry] = useState<(() => void) | null>(null);
   const [recognizeImage, setRecognizeImage] = useState(false);
   const lock = useRef(false);
   const end = useRef<HTMLDivElement>(null);
@@ -85,11 +95,17 @@ export default function EktWorkspace({ mode }: { mode: Mode }) {
       end.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, pending, busy]);
 
-  async function perform(action: () => Promise<void>) {
+  async function perform(
+    action: () => Promise<void>,
+    label = "Проверяю данные каталога…",
+    allowRetry = true,
+  ) {
     if (lock.current || !session) return;
     lock.current = true;
     setBusy(true);
     setError("");
+    setRetry(null);
+    setActivity(label);
     // Called only from user event handlers; this measures the completed request.
     // eslint-disable-next-line react-hooks/purity
     const started = performance.now();
@@ -99,6 +115,10 @@ export default function EktWorkspace({ mode }: { mode: Mode }) {
       setError(
         err instanceof Error ? err.message : "Не удалось выполнить запрос.",
       );
+      if (allowRetry)
+        setRetry(() => () => {
+          void perform(action, label);
+        });
     } finally {
       setElapsed((performance.now() - started) / 1000);
       lock.current = false;
@@ -115,62 +135,144 @@ export default function EktWorkspace({ mode }: { mode: Mode }) {
     if (!text.trim() || lock.current) return;
     setTab("chat");
     setInput("");
-    await perform(async () => {
-      add({ role: "user", text });
-      const response = await api<Reply>(mode, "/chat", {
-        session_id: session,
-        message: text,
-      });
-      add({
-        role: "assistant",
-        text: response.message,
-        products: response.products,
-        alternatives: response.alternatives,
-      });
-      if (response.error) setError(response.error.message);
-      if (response.pending_confirmation)
-        setPending(response.pending_confirmation);
-      else if (
-        response.intent === "product_search" ||
-        (response.error &&
-          ["add_to_cart_prepare", "add_to_cart_confirm"].includes(response.intent)) ||
-        response.cart ||
-        (response.products.length &&
-          response.products[0].id !== pending?.product.id)
-      )
-        setPending(null);
-      if (response.cart) setCart(response.cart);
-    });
+    const label = /сравн|салыстыр/i.test(text)
+      ? "Сверяю характеристики товаров…"
+      : /аналог|замен/i.test(text)
+        ? "Проверяю наличие и подходящие альтернативы…"
+        : /excel|закупк|талда/i.test(text)
+          ? "Сверяю позиции закупки с каталогом…"
+          : /добав|штук|дана/i.test(text)
+            ? "Проверяю остаток перед добавлением…"
+            : "Ищу ответ и товары в каталоге…";
+    await perform(
+      async () => {
+        add({ role: "user", text });
+        const response = await api<Reply>(mode, "/chat", {
+          session_id: session,
+          message: text,
+        });
+        add({
+          role: "assistant",
+          text: response.message,
+          products: response.products,
+          alternatives: response.alternatives,
+          intent: response.intent,
+        });
+        if (response.error) {
+          if (
+            ["add_to_cart_prepare", "add_to_cart_confirm"].includes(
+              response.intent,
+            )
+          ) {
+            setPending(null);
+            setQueue([]);
+          }
+          throw new Error(response.error.message);
+        }
+        if (response.intent === "procurement_analysis") {
+          try {
+            setReport(
+              await api<ProcurementReport>(
+                mode,
+                `/chat/procurement/${session}`,
+              ),
+            );
+          } catch {
+            /* The chat explains when an upload is required. */
+          }
+        }
+        if (response.pending_confirmation) {
+          setPending(response.pending_confirmation);
+          setQueue([]);
+        } else if (
+          response.intent === "product_search" ||
+          (response.error &&
+            ["add_to_cart_prepare", "add_to_cart_confirm"].includes(
+              response.intent,
+            )) ||
+          response.cart ||
+          (response.products.length &&
+            [
+              "product_details",
+              "stock_check",
+              "certificate_request",
+              "alternative_request",
+            ].includes(response.intent) &&
+            response.products[0].id !== pending?.product.id)
+        ) {
+          setPending(null);
+          if (response.intent !== "add_to_cart_confirm") setQueue([]);
+        }
+        if (response.cart) setCart(response.cart);
+        if (response.intent === "add_to_cart_confirm" && queue.length) {
+          const [next, ...rest] = queue;
+          setQueue(rest);
+          setPending(
+            await api<Pending>(mode, "/cart/prepare", {
+              session_id: session,
+              product_id: next.product.id,
+              quantity: next.quantity,
+            }),
+          );
+        } else if (
+          ["cancel_cart_action", "product_search"].includes(response.intent)
+        )
+          setQueue([]);
+      },
+      label,
+      !/^\s*(да|подтверждаю|yes|confirm|i confirm|иә|растаймын)(?:[\s.,!?]|$)/i.test(
+        text,
+      ),
+    );
   }
   async function prepare(product: Product, quantity: number) {
     setTab("chat");
     setPending(null);
-    await perform(async () =>
-      setPending(
-        await api<Pending>(mode, "/cart/prepare", {
-          session_id: session,
-          product_id: product.id,
-          quantity,
-        }),
-      ),
+    await perform(
+      async () =>
+        setPending(
+          await api<Pending>(mode, "/cart/prepare", {
+            session_id: session,
+            product_id: product.id,
+            quantity,
+          }),
+        ),
+      "Проверяю свежий остаток перед подготовкой…",
     );
   }
   async function confirm() {
-    await perform(async () => {
-      try {
-        setCart(
-          await api<Cart>(mode, "/cart/confirm", { session_id: session }),
-        );
-        setPending(null);
-        add({
-          role: "assistant",
-          text: "Готово! Товар добавлен в вашу корзину прототипа. Список можно открыть и выгрузить для закупки. Заказ в EKT ещё не оформлен.",
-        });
-      } catch (err) {
-        setPending(null);
-        throw err;
-      }
-    });
+    await perform(
+      async () => {
+        try {
+          setCart(
+            await api<Cart>(mode, "/cart/confirm", { session_id: session }),
+          );
+          setPending(null);
+          add({
+            role: "assistant",
+            text: "Готово! Товар добавлен в вашу корзину прототипа. Список можно открыть и выгрузить для закупки. Заказ в EKT ещё не оформлен.",
+          });
+          if (queue.length) {
+            const [next, ...rest] = queue;
+            setQueue(rest);
+            setActivity("Проверяю следующую позицию закупки…");
+            setPending(
+              await api<Pending>(mode, "/cart/prepare", {
+                session_id: session,
+                product_id: next.product.id,
+                quantity: next.quantity,
+              }),
+            );
+          }
+        } catch (err) {
+          setPending(null);
+          setQueue([]);
+          throw err;
+        }
+      },
+      "Повторно проверяю остаток и подтверждённое количество…",
+      false,
+    );
   }
   async function cancel() {
     await perform(async () => {
@@ -178,12 +280,13 @@ export default function EktWorkspace({ mode }: { mode: Mode }) {
         session_id: session,
       });
       setPending(null);
+      setQueue([]);
       setCart(result.cart);
       add({
         role: "assistant",
         text: "Добавление отменено. Состав корзины сохранён.",
       });
-    });
+    }, "Отменяю ожидающее добавление…");
   }
   async function search(value = query) {
     if (!value.trim()) return;
@@ -195,41 +298,110 @@ export default function EktWorkspace({ mode }: { mode: Mode }) {
         message: string | null;
       }>(mode, `/products/search?q=${encodeURIComponent(value)}`);
       setResults(result.products);
+      setCatalogPage(null);
       setSearchNote(
         result.partial
           ? result.message ||
               "Поиск выполнен по доступной части каталога. Для точной проверки укажите ID товара."
           : "",
       );
-    });
+    }, "Ищу товары в каталоге и проверяю наличие…");
+  }
+  async function browse(page = 1) {
+    await perform(async () => {
+      const result = await api<{
+        products: Product[];
+        page: number;
+        has_next: boolean | null;
+      }>(mode, `/products?page=${page}`);
+      setResults(result.products);
+      setCatalogPage(result.page);
+      setHasNextPage(
+        result.has_next !== false && result.products.length > 0 && page < 50,
+      );
+      setQuery("");
+      setSearchNote(
+        mode === "demo"
+          ? "24 учебных товара. Цены и остатки синтетические: для демонстрации, не для заказа у EKT."
+          : "Товары из EKT. Для точного наличия откройте карточку: список API не содержит остатков. Доступен просмотр первых 50 страниц.",
+      );
+    }, "Загружаю страницу каталога…");
   }
   async function upload(file: File) {
-    await perform(async () => {
-      if (file.size > 10 * 1024 * 1024)
-        throw new Error("Максимальный размер файла — 10 МБ.");
-      const data = new FormData();
-      data.set("session_id", session);
-      data.set("file", file);
-      data.set("recognize_image", String(recognizeImage));
-      setAttachment(await api(mode, "/chat/attachments", data));
-    });
+    await perform(
+      async () => {
+        if (file.size > 10 * 1024 * 1024)
+          throw new Error("Максимальный размер файла — 10 МБ.");
+        const data = new FormData();
+        data.set("session_id", session);
+        data.set("file", file);
+        data.set("recognize_image", String(recognizeImage));
+        const result = await api<Attachment>(mode, "/chat/attachments", data);
+        setAttachment(result);
+        setTab("chat");
+        if (result.procurement) setReport(result.procurement);
+        add({
+          role: "assistant",
+          text: `${result.filename}: ${result.message}`,
+          products: result.candidates,
+          intent: result.procurement
+            ? "procurement_analysis"
+            : "photo_identification",
+        });
+      },
+      /\.(jpg|jpeg|png)$/i.test(file.name)
+        ? "Обрабатываю фото и проверяю кандидатов каталога…"
+        : "Читаю спецификацию, проверяю остатки и возможные замены…",
+    );
+  }
+  async function selectProcurement(index: number, productId: string) {
+    await perform(
+      async () =>
+        setReport(
+          await api<ProcurementReport>(mode, "/chat/procurement/select", {
+            session_id: session,
+            row_index: index,
+            product_id: productId,
+          }),
+        ),
+      "Проверяю выбранный товар и пересчитываю закупку…",
+    );
+  }
+  async function prepareProcurement(
+    items: { product: Product; quantity: number }[],
+  ) {
+    if (!items.length || busy) return;
+    setQueue(items.slice(1));
+    await prepare(items[0].product, items[0].quantity);
   }
   const productActions = {
     busy,
-    onPrepare: prepare,
+    onPrepare: (p: Product, quantity: number) => {
+      setQueue([]);
+      void prepare(p, quantity);
+    },
     onDetail: (p: Product) => {
       void send(`товар ${p.id}`);
     },
     onAlternatives: (p: Product) => {
       void send(`аналоги товара ${p.id}`);
     },
+    onCertificate: (p: Product) => {
+      void send(`Сертификат товара ${p.id}`);
+    },
+    onCompare: (p: Product) =>
+      setComparison((previous) =>
+        previous.some((item) => item.id === p.id)
+          ? previous.filter((item) => item.id !== p.id)
+          : [...previous.slice(-1), p],
+      ),
   };
   const demo = mode === "demo";
   const suggestions = [
     {
       icon: "search" as const,
       title: "Подобрать автомат",
-      text: "Мне нужен автомат на 25А",
+      text: "Мне нужен автомат Schneider на 25А",
       hint: "Поиск по параметрам",
     },
     {
@@ -271,7 +443,10 @@ export default function EktWorkspace({ mode }: { mode: Mode }) {
             <button
               key={item.id}
               className={tab === item.id ? "nav-item active" : "nav-item"}
-              onClick={() => setTab(item.id)}
+              onClick={() => {
+                setTab(item.id);
+                if (item.id === "catalog" && results === null) void browse();
+              }}
             >
               <Icon name={item.icon} />
               <span>{item.label}</span>
@@ -323,6 +498,16 @@ export default function EktWorkspace({ mode }: { mode: Mode }) {
                 : "Подключение…"}
             </span>
             <span className="user-avatar">Г</span>
+            <span
+              className="ai-mode-badge"
+              title={
+                status?.language_model_configured
+                  ? "Ключ модели настроен на сервере"
+                  : "Детерминированные сценарии без AI-ключа"
+              }
+            >
+              {status?.language_model_configured ? "AI MODE" : "DEMO MODE"}
+            </span>
           </div>
         </header>
         <div className={`mode-banner ${demo ? "is-demo" : ""}`}>
@@ -366,6 +551,15 @@ export default function EktWorkspace({ mode }: { mode: Mode }) {
             {error && (
               <div role="alert" className="error-banner">
                 <span>{error}</span>
+                {retry && (
+                  <button
+                    className="secondary small"
+                    disabled={busy}
+                    onClick={retry}
+                  >
+                    Повторить
+                  </button>
+                )}
                 <button
                   aria-label="Закрыть ошибку"
                   onClick={() => setError("")}
@@ -376,6 +570,66 @@ export default function EktWorkspace({ mode }: { mode: Mode }) {
             )}
             {tab === "chat" && (
               <>
+                <div
+                  className="demo-quick-actions"
+                  aria-label="Быстрые сценарии"
+                >
+                  {[
+                    [
+                      "🔎 Найти автомат 25А",
+                      "Мне нужен автомат Schneider на 25А",
+                    ],
+                    ["📦 Проверить наличие", "Есть ли в наличии?"],
+                    [
+                      "🔄 Найти аналог",
+                      demo ? "Есть аналог товара 900003?" : "Есть аналог?",
+                    ],
+                    [
+                      "📊 Сравнить товары",
+                      comparison.length === 2
+                        ? `Сравни товары ${comparison.map((p) => p.id).join(" и ")}`
+                        : demo
+                          ? "Сравни товары 900001 и 900002"
+                          : "Сравни эти два товара",
+                    ],
+                    ["📄 Анализ закупки", "Проанализируй мой Excel"],
+                    ["📷 Товар по фото", "Что это за товар по фото?"],
+                    ["🛒 Подготовить закупку", "Подготовить закупку"],
+                  ].map(([title, text]) => (
+                    <button
+                      key={title}
+                      disabled={busy || !session}
+                      onClick={() => send(text)}
+                    >
+                      {title}
+                    </button>
+                  ))}
+                </div>
+                {!!comparison.length && (
+                  <div className="comparison-selection">
+                    <span>
+                      Сравнить:{" "}
+                      {comparison.map((p) => p.article || p.id).join(" + ")} (
+                      {comparison.length}/2)
+                    </span>
+                    <button
+                      disabled={comparison.length !== 2 || busy}
+                      onClick={() =>
+                        send(
+                          `Сравни товары ${comparison.map((p) => p.id).join(" и ")}`,
+                        )
+                      }
+                    >
+                      Показать таблицу
+                    </button>
+                    <button
+                      onClick={() => setComparison([])}
+                      aria-label="Очистить сравнение"
+                    >
+                      <Icon name="close" size={14} />
+                    </button>
+                  </div>
+                )}
                 <section
                   className="conversation"
                   aria-label="Диалог с консультантом"
@@ -453,17 +707,25 @@ export default function EktWorkspace({ mode }: { mode: Mode }) {
                             )}
                           </div>
                           <p className="message-text">{message.text}</p>
-                          {!!message.products?.length && (
-                            <div className="product-grid">
-                              {message.products.map((product) => (
-                                <CatalogProduct
-                                  key={product.id}
-                                  product={product}
-                                  {...productActions}
-                                />
-                              ))}
-                            </div>
-                          )}
+                          {message.intent === "product_compare" &&
+                            message.products && (
+                              <ProductComparison products={message.products} />
+                            )}
+                          {!!message.products?.length &&
+                            ![
+                              "product_compare",
+                              "procurement_analysis",
+                            ].includes(message.intent || "") && (
+                              <div className="product-grid">
+                                {message.products.map((product) => (
+                                  <CatalogProduct
+                                    key={product.id}
+                                    product={product}
+                                    {...productActions}
+                                  />
+                                ))}
+                              </div>
+                            )}
                           {!!message.alternatives?.length && (
                             <>
                               <h3 className="alternatives-title">
@@ -488,6 +750,14 @@ export default function EktWorkspace({ mode }: { mode: Mode }) {
                       </div>
                     ))}
                   </div>
+                  {report && (
+                    <ProcurementSummary
+                      report={report}
+                      busy={busy || !!pending}
+                      onSelect={selectProcurement}
+                      onPrepare={prepareProcurement}
+                    />
+                  )}
                   {pending && (
                     <section
                       className="confirmation"
@@ -502,6 +772,12 @@ export default function EktWorkspace({ mode }: { mode: Mode }) {
                           <p>
                             Состав изменится только после вашего подтверждения
                           </p>
+                          {!!queue.length && (
+                            <p>
+                              Далее в закупке: {queue.length} позиций. Каждая
+                              потребует подтверждения.
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="confirmation-item">
@@ -534,7 +810,7 @@ export default function EktWorkspace({ mode }: { mode: Mode }) {
                     <div className="thinking" role="status">
                       <span />
                       <span />
-                      <span /> Проверяю данные…
+                      <span /> {activity}
                     </div>
                   )}
                   <div ref={end} />
@@ -693,7 +969,16 @@ export default function EktWorkspace({ mode }: { mode: Mode }) {
                   </button>
                 </form>
                 <div className="quick-filters">
-                  {["автомат 25А", "кабель", "выключатель"].map((value) => (
+                  <button disabled={busy} onClick={() => browse()}>
+                    Обзор каталога
+                  </button>
+                  {[
+                    "автомат 25А",
+                    "кабель",
+                    "светильник",
+                    "щит",
+                    "выключатель",
+                  ].map((value) => (
                     <button
                       key={value}
                       disabled={busy}
@@ -708,8 +993,32 @@ export default function EktWorkspace({ mode }: { mode: Mode }) {
                 {results !== null ? (
                   <>
                     <div className="results-label">
-                      Найдено: {results.length}
+                      {catalogPage
+                        ? `Страница ${catalogPage} · Товаров: ${results.length}`
+                        : `Найдено: ${results.length}`}
                     </div>
+                    {catalogPage !== null && (
+                      <div
+                        className="catalog-pagination"
+                        aria-label="Страницы каталога"
+                      >
+                        <button
+                          className="secondary"
+                          disabled={busy || catalogPage <= 1}
+                          onClick={() => browse(catalogPage - 1)}
+                        >
+                          ← Назад
+                        </button>
+                        <span>Страница {catalogPage}</span>
+                        <button
+                          className="secondary"
+                          disabled={busy || !hasNextPage}
+                          onClick={() => browse(catalogPage + 1)}
+                        >
+                          Далее →
+                        </button>
+                      </div>
+                    )}
                     <div className="product-grid">
                       {results.map((p) => (
                         <CatalogProduct

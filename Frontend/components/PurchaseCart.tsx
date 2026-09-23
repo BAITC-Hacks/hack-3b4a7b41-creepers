@@ -103,6 +103,13 @@ export default function PurchaseCart({
                   <div>
                     <small>{product.article || `ID ${product.id}`}</small>
                     <h3>{product.name}</h3>
+                    <small>
+                      Остаток при добавлении:{" "}
+                      {product.stock === null ? "нет данных" : product.stock} ·{" "}
+                      {product.source === "demo_catalog"
+                        ? "Учебный каталог"
+                        : "Каталог EKT"}
+                    </small>
                   </div>
                   <strong>{quantity} ед.</strong>
                   <span>{money(product)}</span>

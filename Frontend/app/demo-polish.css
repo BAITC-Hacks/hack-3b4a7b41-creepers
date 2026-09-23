@@ -1,0 +1,340 @@
+.ai-mode-badge {
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  padding: 5px 7px;
+  border-radius: 5px;
+  color: #826345;
+  background: #fff4e6;
+  border: 1px solid #eddcc6;
+  white-space: nowrap;
+}
+.demo-quick-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+}
+.demo-quick-actions button {
+  font-size: 10px;
+  color: #607780;
+  background: #fff;
+  border: 1px solid #e1e8ea;
+  border-radius: 7px;
+  padding: 7px 9px;
+}
+.demo-quick-actions button:hover {
+  border-color: #d6ac8e;
+  background: #fff9f3;
+}
+.product-source {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #8b9b9f;
+  font-size: 8px;
+  margin-top: 11px;
+}
+.card-tool-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+.card-tool-buttons button {
+  background: #f5f8f9;
+  border: 1px solid #e7edef;
+  border-radius: 5px;
+  color: #758991;
+  font-size: 9px;
+  padding: 5px 7px;
+}
+.comparison-selection {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #e7d4c1;
+  background: #fff8ef;
+  border-radius: 8px;
+  font-size: 10px;
+  margin-bottom: 10px;
+}
+.comparison-selection span {
+  flex: 1;
+}
+.comparison-selection button {
+  color: #a76a3e;
+  font-weight: 650;
+}
+.comparison-panel,
+.procurement-panel {
+  margin: 17px 0;
+  background: #fff;
+  border: 1px solid #dce6e8;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.comparison-panel h3 {
+  display: flex;
+  gap: 8px;
+  padding: 17px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+.comparison-panel table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 430px;
+  font-size: 10px;
+  table-layout: fixed;
+}
+.comparison-panel th,
+.comparison-panel td {
+  padding: 12px;
+  vertical-align: top;
+  text-align: left;
+  border-top: 1px solid #e8edef;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+.comparison-panel thead th {
+  background: #f3f7f7;
+  font-weight: 600;
+}
+.comparison-panel tbody th {
+  font-weight: 500;
+  color: #73878d;
+  width: 30%;
+}
+.comparison-panel small {
+  display: block;
+  color: #9daaaa;
+  font-size: 8px;
+  margin-top: 6px;
+}
+.comparison-panel tr.different {
+  background: #fffbf2;
+}
+.comparison-panel > p {
+  padding: 13px 16px;
+  color: #8b999e;
+  font-size: 9px;
+  line-height: 1.8;
+}
+.procurement-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 18px;
+  background: #f2f7f5;
+}
+.procurement-heading > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.procurement-heading small {
+  font-size: 9px;
+  color: #7b9284;
+}
+.procurement-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 18px;
+  gap: 10px;
+  border-bottom: 1px solid #e8edef;
+}
+.procurement-metrics strong {
+  display: block;
+  font-size: 24px;
+  font-weight: 600;
+  color: #355c4b;
+}
+.procurement-metrics span {
+  display: block;
+  font-size: 9px;
+  color: #879a90;
+  margin-top: 5px;
+}
+.procurement-metrics > div:last-child strong {
+  color: #b98249;
+}
+.procurement-row {
+  padding: 17px;
+  border-bottom: 1px solid #eef2f3;
+}
+.procurement-row-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.procurement-row-title > div {
+  flex: 1;
+  min-width: 0;
+}
+.procurement-row-title strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.procurement-row-title small {
+  display: block;
+  color: #889a9f;
+  font-size: 10px;
+  margin-top: 5px;
+  line-height: 1.6;
+}
+.procurement-row-title b {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.row-ok,
+.row-attention {
+  border-radius: 50%;
+  width: 23px;
+  height: 23px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.row-ok {
+  background: #eaf4ed;
+  color: #4c8e66;
+}
+.row-attention {
+  background: #fff2de;
+  color: #b98640;
+}
+.procurement-price {
+  padding: 9px 0 0 34px;
+  font-size: 10px;
+  color: #81939a;
+}
+.procurement-row select {
+  width: 100%;
+  font-size: 11px;
+  border: 1px solid #dce5e8;
+  border-radius: 7px;
+  padding: 10px;
+  margin-top: 12px;
+  color: #546d77;
+  background: #fff;
+}
+.procurement-alternatives {
+  margin-top: 12px;
+  padding: 11px;
+  border: 1px solid #e5ede7;
+  border-radius: 8px;
+  background: #f7faf6;
+}
+.procurement-alternatives small {
+  font-size: 9px;
+  color: #889b84;
+}
+.procurement-alternatives span {
+  display: block;
+  font-size: 11px;
+  margin-top: 8px;
+}
+.procurement-alternatives p {
+  font-size: 9px;
+  color: #859681;
+  line-height: 1.8;
+  margin-top: 5px;
+}
+.procurement-explanation {
+  font-size: 10px;
+  color: #86979e;
+  padding: 16px;
+  line-height: 1.9;
+}
+.procurement-panel > .primary {
+  margin: 0 16px;
+  width: calc(100% - 32px);
+}
+.procurement-panel > .muted {
+  padding: 12px 16px;
+  font-size: 9px;
+}
+.conversation {
+  max-height: calc(100dvh - 450px);
+}
+@media (max-width: 720px) {
+  .ai-mode-badge {
+    font-size: 7px;
+    padding: 4px;
+  }
+  .topbar-actions {
+    gap: 6px;
+  }
+  .topbar .user-avatar {
+    display: none;
+  }
+  .demo-quick-actions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 5px;
+    scrollbar-width: thin;
+  }
+  .demo-quick-actions button {
+    white-space: nowrap;
+    font-size: 9px;
+  }
+  .comparison-selection {
+    font-size: 9px;
+    flex-wrap: wrap;
+  }
+  .comparison-panel table {
+    min-width: 380px;
+  }
+  .procurement-heading {
+    padding: 13px;
+    align-items: start;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .procurement-metrics {
+    padding: 13px;
+  }
+  .procurement-metrics strong {
+    font-size: 20px;
+  }
+  .procurement-row {
+    padding: 13px;
+  }
+  .procurement-row-title strong {
+    font-size: 11px;
+  }
+  .procurement-row-title b {
+    font-size: 11px;
+  }
+  .conversation {
+    max-height: none;
+  }
+  .welcome-graphic {
+    height: 100px;
+  }
+  .welcome-caption {
+    margin-top: 4px;
+  }
+}
+.catalog-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 20px;
+  font-size: 13px;
+}
+.catalog-pagination button {
+  padding: 9px 15px;
+}
