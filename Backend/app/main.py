@@ -5,11 +5,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import health
+from app.api import health, products
 from app.clients.ekt_client import EktClient
 from app.config import Settings
 from app.core.errors import AppError
 from app.core.logging import configure_logging
+from app.services.product_service import ProductService
+from app.services.alternative_service import AlternativeService
 
 
 def create_app(settings: Settings | None = None, *, ekt_client=None) -> FastAPI:
@@ -21,6 +23,8 @@ def create_app(settings: Settings | None = None, *, ekt_client=None) -> FastAPI:
         client = ekt_client or EktClient(settings)
         application.state.ekt = client
         application.state.settings = settings
+        application.state.products = ProductService(client)
+        application.state.alternatives = AlternativeService(application.state.products)
         try:
             yield
         finally:
@@ -45,6 +49,7 @@ def create_app(settings: Settings | None = None, *, ekt_client=None) -> FastAPI:
         }})
 
     application.include_router(health.router)
+    application.include_router(products.router)
     return application
 
 
