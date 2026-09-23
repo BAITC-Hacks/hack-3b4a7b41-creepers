@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -8,6 +9,9 @@ from fastapi.responses import JSONResponse
 from app.api import health, products, chat, cart
 from app.agents.assistant import Assistant
 from app.agents.tools import AssistantTools
+from app.agents.language import LanguageRouter
+from app.clients.demo_catalog import DemoCatalog
+from app.services.conditions_service import POLICIES, SOURCE
 from app.clients.ekt_client import EktClient
 from app.config import Settings
 from app.core.errors import AppError
@@ -38,7 +42,13 @@ def create_app(settings: Settings | None = None, *, ekt_client=None) -> FastAPI:
         application.state.assistant = Assistant(AssistantTools(
             application.state.products, application.state.alternatives, application.state.sessions,
             application.state.cart,
-        ))
+        ), LanguageRouter(settings))
+        demo_products = ProductService(DemoCatalog(settings.demo_checkout_base_url))
+        demo = SimpleNamespace(settings=settings, products=demo_products,
+            alternatives=AlternativeService(demo_products), sessions=SessionService(settings))
+        demo.cart = CartService(StockService(demo_products), settings, demo=True)
+        demo.assistant = Assistant(AssistantTools(demo.products, demo.alternatives, demo.sessions, demo.cart))
+        application.state.demo = demo
         try:
             yield
         finally:
@@ -48,7 +58,8 @@ def create_app(settings: Settings | None = None, *, ekt_client=None) -> FastAPI:
     application = FastAPI(title="Creepers AI — EKT Assistant", version="0.1.0", lifespan=lifespan)
     @application.middleware("http")
     async def upload_size_guard(request: Request, call_next):
-        if request.url.path == "/api/chat/attachments" and request.method == "POST":
+        request.state.services = request.app.state.demo if request.url.path.startswith("/demo/") else request.app.state
+        if request.url.path.endswith("/api/chat/attachments") and request.method == "POST":
             length = request.headers.get("content-length", "")
             if not length.isascii() or not length.isdigit() or request.headers.get("transfer-encoding"):
                 return JSONResponse(status_code=411, content={"error": {"code": "content_length_required", "message": "Для загрузки требуется Content-Length."}})
@@ -79,6 +90,16 @@ def create_app(settings: Settings | None = None, *, ekt_client=None) -> FastAPI:
     application.include_router(products.router)
     application.include_router(chat.router)
     application.include_router(cart.router)
+    for router in (health.router, products.router, chat.router, cart.router):
+        application.include_router(router, prefix="/demo")
+
+    @application.get("/api/status")
+    @application.get("/demo/api/status")
+    async def status(request: Request):
+        is_demo = request.url.path.startswith("/demo/")
+        return {"mode": "demo" if is_demo else "live", "catalog_configured": is_demo or bool(settings.ekt_api_password.get_secret_value()),
+                "language_model_configured": not is_demo and bool(settings.openai_api_key.get_secret_value()),
+                "policies": POLICIES, "policy_source": SOURCE, "policy_checked_at": "2026-09-23"}
     return application
 
 

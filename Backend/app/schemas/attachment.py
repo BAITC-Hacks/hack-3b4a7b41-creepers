@@ -10,6 +10,7 @@ class AttachmentResponse(BaseModel):
     filename: str
     size_bytes: int
     content_type: str | None
-    status: Literal["metadata_only"] = "metadata_only"
+    status: Literal["metadata_only", "text_extracted"] = "metadata_only"
     analyzed: bool = False
+    extracted_text: str | None = None
     message: str = "Получены только метаданные файла. Содержимое не анализировалось и не сохранено."

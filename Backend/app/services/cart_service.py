@@ -11,15 +11,16 @@ from app.services.stock_service import StockService
 class CartService:
     """Call while holding SessionService.use(). All cart mutations live here."""
 
-    def __init__(self, stock: StockService, settings: Settings):
+    def __init__(self, stock: StockService, settings: Settings, *, demo: bool = False):
         self.stock = stock
         self.settings = settings
+        self.demo = demo
 
     def view(self, session: Session) -> CartResponse:
         return CartResponse(
             items=[item.model_copy(deep=True) for item in session.cart.values()],
             total_items=sum(item.quantity for item in session.cart.values()),
-            checkout_url=f"{self.settings.demo_checkout_base_url}/cart/{quote(session.session_id, safe='')}",
+            checkout_url=f"{self.settings.demo_checkout_base_url}/cart/{quote(session.session_id, safe='')}" + ("?mode=demo" if self.demo else ""),
         )
 
     async def prepare(self, session: Session, product_id: str, quantity: int) -> PendingConfirmation:

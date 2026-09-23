@@ -5,11 +5,14 @@ from app.schemas.chat import ChatResponse
 
 
 class Assistant:
-    def __init__(self, tools: AssistantTools):
+    def __init__(self, tools: AssistantTools, language=None):
         self.tools = tools
+        self.language = language
 
     async def reply(self, session_id: str, message: str) -> ChatResponse:
         decision = classify(message)
+        if self.language and decision.intent == "unknown":
+            decision = await self.language.understand(message, decision)
         try:
             async with self.tools.sessions.use(session_id) as session:
                 if decision.intent == "cancel_cart_action":

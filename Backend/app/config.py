@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     session_ttl_seconds: int = Field(default=3600, ge=60)
     max_sessions: int = Field(default=1000, ge=1, le=100000)
     attachment_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1)
+    openai_api_key: SecretStr = Field(default=SecretStr(""), repr=False)
+    openai_model: str = "gpt-4o-mini"
 
     @field_validator("ekt_api_base_url", "demo_checkout_base_url")
     @classmethod

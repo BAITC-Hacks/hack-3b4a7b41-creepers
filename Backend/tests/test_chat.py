@@ -27,7 +27,7 @@ def test_missing_data_and_policies(client):
     assert "не найден" in chat(client, "Есть сертификат?")["message"]
     for message, intent in [("Как оплатить?", "payment_info"), ("Есть доставка?", "delivery_info"), ("Минимальный заказ?", "minimum_order")]:
         result = chat(client, message)
-        assert result["intent"] == intent and "недоступна" in result["message"]
+        assert result["intent"] == intent and "https://ekt.kz/about/faq/" in result["message"]
 
 
 def test_zero_stock_has_alternatives(client):
