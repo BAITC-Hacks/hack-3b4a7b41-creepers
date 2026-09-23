@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     ekt_timeout_seconds: float = Field(default=10, gt=0, le=60)
     catalog_max_pages: int = Field(default=5, ge=1, le=50)
     catalog_cache_seconds: float = Field(default=60, ge=0, le=3600)
+    catalog_search_timeout_seconds: float = Field(default=8, gt=0, le=60)
     session_ttl_seconds: int = Field(default=3600, ge=60)
     max_sessions: int = Field(default=1000, ge=1, le=100000)
     attachment_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1)

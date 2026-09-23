@@ -57,3 +57,8 @@ def test_validation_and_session_isolation(client):
     assert result.status_code == 422 and result.json()["error"]["code"] == "validation_error"
     chat(client, "товар 515291", "alice")
     assert chat(client, "Характеристики", "bob")["error"]["code"] == "product_selection_required"
+
+
+def test_article_query(client):
+    result = chat(client, "Найди по артикулу TEST-25")
+    assert result["products"]

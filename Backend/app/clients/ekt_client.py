@@ -49,7 +49,9 @@ def matches_query(product: Product, query: str) -> bool:
         [product.id, product.article or "", product.name, product.category or ""]
         + [f"{key} {value}" for key, value in product.specifications.items()]
     )))
-    return all(token in haystack for token in search_tokens(query))
+    # A request for 25A must not match 125A or 250A.
+    return all((re.search(r"(?<!\w)" + re.escape(token) + r"(?!\w)", haystack) is not None)
+               if token[0].isdigit() else token in haystack for token in search_tokens(query))
 
 
 class EktClient:
@@ -133,18 +135,23 @@ class EktClient:
         partial = True
         scanned = 0
         # One bounded scan at a time; concurrent callers reuse cached pages.
-        async with self._search_lock:
-            for page in range(1, self.settings.catalog_max_pages + 1):
-                result = await self._cached_page(page)
-                scanned += 1
-                for product in result.products:
-                    if matches_query(product, query):
-                        products[product.id] = product
-                if not result.products or result.has_next is False:
-                    partial = False
-                    break
-                if len(products) >= 20:
-                    break
+        try:
+            async with asyncio.timeout(self.settings.catalog_search_timeout_seconds):
+                async with self._search_lock:
+                    for page in range(1, self.settings.catalog_max_pages + 1):
+                        result = await self._cached_page(page)
+                        scanned += 1
+                        for product in result.products:
+                            if matches_query(product, query):
+                                products[product.id] = product
+                        if not result.products or result.has_next is False:
+                            partial = False
+                            break
+                        if len(products) >= 20:
+                            break
+        except TimeoutError:
+            if scanned == 0:
+                raise AppError("ekt_timeout", "Поиск по каталогу EKT не завершился вовремя.", 504) from None
         found = list(products.values())[:20]
         return ProductSearchResponse(
             products=found, query=query, scanned_pages=scanned,

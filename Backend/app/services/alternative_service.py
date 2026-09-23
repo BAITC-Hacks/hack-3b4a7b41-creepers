@@ -1,3 +1,4 @@
+import asyncio
 import re
 
 from app.core.errors import AppError
@@ -44,7 +45,10 @@ class AlternativeService:
     async def find(self, source: Product) -> AlternativesResponse:
         if not source.category:
             return AlternativesResponse(product=source)
-        result = await self.products.search(source.category)
+        try:
+            result = await self.products.search(source.category)
+        except AppError:
+            return AlternativesResponse(product=source, partial=True)
         ranked = []
         partial = result.partial
         for candidate in result.products:
@@ -53,10 +57,16 @@ class AlternativeService:
                 ranked.append((match[0], candidate))
         alternatives = []
         # Bounded live validation: cached search stock never proves current availability.
-        for _, candidate in sorted(ranked, key=lambda item: (-item[0], item[1].id))[:5]:
+        async def refresh(candidate):
             try:
-                fresh = await self.products.detail(candidate.id)
+                return await self.products.detail(candidate.id)
             except AppError:
+                return None
+        refreshed = await asyncio.gather(*[
+            refresh(candidate) for _, candidate in sorted(ranked, key=lambda item: (-item[0], item[1].id))[:5]
+        ])
+        for fresh in refreshed:
+            if fresh is None:
                 partial = True
                 continue
             match = similarity(source, fresh)

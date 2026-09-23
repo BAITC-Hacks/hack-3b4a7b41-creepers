@@ -62,7 +62,7 @@ def classify(message: str) -> Decision:
     if product_id:
         return Decision("product_details", product_id=product_id)
     if re.search(r"найди|найти|ищу|нуж[еен]|покажи|поиск|автомат|кабел|выключател|\bsearch\b|\bfind\b|\d", text):
-        query = re.sub(r"\b(?:мне|нужен|нужна|нужно|нужны|найди|найти|ищу|покажи|пожалуйста|на|search|find)\b", " ", text)
+        query = re.sub(r"\b(?:мне|нужен|нужна|нужно|нужны|найди|найти|ищу|покажи|пожалуйста|на|артикул[уа]?|по|search|find)\b", " ", text)
         query = re.sub(r"\s+", " ", query).strip(" .,!?:")
         return Decision("product_search", query=query or None)
     return Decision("unknown")

@@ -46,6 +46,16 @@ def create_app(settings: Settings | None = None, *, ekt_client=None) -> FastAPI:
                 await client.close()
 
     application = FastAPI(title="Creepers AI — EKT Assistant", version="0.1.0", lifespan=lifespan)
+    @application.middleware("http")
+    async def upload_size_guard(request: Request, call_next):
+        if request.url.path == "/api/chat/attachments" and request.method == "POST":
+            length = request.headers.get("content-length", "")
+            if not length.isascii() or not length.isdigit() or request.headers.get("transfer-encoding"):
+                return JSONResponse(status_code=411, content={"error": {"code": "content_length_required", "message": "Для загрузки требуется Content-Length."}})
+            if len(length) > 12 or int(length) > settings.attachment_max_bytes + 65536:
+                return JSONResponse(status_code=413, content={"error": {"code": "attachment_too_large", "message": "Файл превышает допустимый размер."}})
+        return await call_next(request)
+
     application.add_middleware(
         CORSMiddleware, allow_origins=settings.allowed_origins,
         allow_methods=["GET", "POST"], allow_headers=["Content-Type"], allow_credentials=False,

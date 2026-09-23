@@ -30,3 +30,14 @@ def test_fresh_availability_rechecked(client, catalog):
 
 def test_no_alternative_without_comparable_data(client):
     assert client.get("/api/products/515295/alternatives").json()["alternatives"] == []
+
+
+def test_search_failure_preserves_known_product(client, catalog):
+    from app.core.errors import AppError
+    async def unavailable(query):
+        raise AppError("ekt_unavailable", "Каталог недоступен.", 503)
+    catalog.search_products = unavailable
+    response = client.get("/api/products/515293/alternatives")
+    assert response.status_code == 200
+    assert response.json()["product"]["availability"] == "out_of_stock"
+    assert response.json()["partial"] is True and response.json()["alternatives"] == []

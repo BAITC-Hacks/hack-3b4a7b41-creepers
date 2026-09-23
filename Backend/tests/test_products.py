@@ -2,7 +2,30 @@ import httpx
 import pytest
 
 from app.clients.ekt_client import EktClient
+from app.clients.ekt_client import matches_query
+from app.schemas.product import Product
 from tests.test_ekt_client import SyntheticAdapter, settings
+
+
+def test_rating_does_not_match_larger_number():
+    assert matches_query(Product(id="1", name="Автомат 25А"), "25A")
+    assert not matches_query(Product(id="2", name="Автомат 125А"), "25A")
+    assert not matches_query(Product(id="3", name="Автомат 250А"), "25A")
+
+
+async def test_total_search_deadline():
+    import asyncio
+    from app.core.errors import AppError
+    async def slow(request):
+        await asyncio.sleep(0.1)
+        return httpx.Response(200, json={"test_items": []})
+    client = EktClient(settings(catalog_search_timeout_seconds=0.01), transport=httpx.MockTransport(slow), adapter=SyntheticAdapter())
+    try:
+        with pytest.raises(AppError) as error:
+            await client.search_products("25A")
+        assert error.value.code == "ekt_timeout"
+    finally:
+        await client.close()
 
 
 def test_search_and_detail(client):
