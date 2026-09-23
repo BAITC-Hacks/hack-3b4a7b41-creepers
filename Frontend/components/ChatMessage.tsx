@@ -15,7 +15,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
           <span>{isUser ? "Вы" : "AI-консультант"}</span>
           <time className="font-normal normal-case tracking-normal opacity-70" dateTime={message.createdAt.toISOString()}>{time}</time>
         </div>
-        <div className={`rounded-2xl px-4 py-3 text-[0.94rem] leading-6 shadow-sm ${isUser ? "rounded-br-sm bg-[var(--blue)] text-white" : "rounded-bl-sm border border-[var(--line)] bg-white text-[var(--foreground)]"}`}>
+        <div className={`rounded-2xl px-4 py-3 text-[0.94rem] leading-6 shadow-sm ${isUser ? "rounded-br-sm bg-[var(--blue)] text-white" : message.isError ? "rounded-bl-sm border border-[#f0d8d5] bg-[#fff7f6] text-[#a24238]" : "rounded-bl-sm border border-[var(--line)] bg-white text-[var(--foreground)]"}`}>
           {message.content}
         </div>
       </article>
