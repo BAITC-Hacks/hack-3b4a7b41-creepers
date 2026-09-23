@@ -4,6 +4,7 @@ from app.services.conditions_service import ConditionsService
 from app.services.cart_service import CartService
 from app.services.product_service import ProductService
 from app.services.session_service import Session, SessionService
+from app.services.procurement_service import ProcurementService
 
 
 class AssistantTools:
@@ -13,6 +14,7 @@ class AssistantTools:
         self.sessions = sessions
         self.cart = cart
         self.conditions = ConditionsService()
+        self.procurement = ProcurementService(products, alternatives, demo=cart.demo)
 
     async def search(self, session: Session, query: str):
         result = await self.products.search(query)

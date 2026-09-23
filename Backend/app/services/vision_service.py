@@ -1,6 +1,18 @@
 """Optional label OCR, with explicit per-upload opt-in and no cart side effects."""
 import base64
+import re
 import httpx
+
+
+def label_query(text: str) -> str:
+    article = re.search(r"(?:артикул|модель|article|model)\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9./-]{3,40})", text, re.I)
+    if article:
+        return article[1]
+    brand = re.search(r"schneider(?: electric)?|legrand|iek|abb|dekraft", text, re.I)
+    current = re.search(r"\b\d+(?:[.,]\d+)?\s*[aа]\b", text, re.I)
+    if brand or current:
+        return " ".join(item[0] for item in (brand, current) if item)
+    return " ".join(text.splitlines()[:2])[:150]
 
 
 async def read_label(content: bytes, settings) -> str:

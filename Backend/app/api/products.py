@@ -3,9 +3,14 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Request
 
 from app.schemas.cart import ProductId
-from app.schemas.product import AlternativesResponse, Product, ProductSearchResponse
+from app.schemas.product import AlternativesResponse, Product, ProductSearchResponse, CatalogPage
 
 router = APIRouter(prefix="/api/products", tags=["products"])
+
+
+@router.get("", response_model=CatalogPage)
+async def browse(request: Request, page: Annotated[int, Query(ge=1, le=50)] = 1):
+    return await request.state.services.products.browse(page)
 
 
 @router.get("/search", response_model=ProductSearchResponse)

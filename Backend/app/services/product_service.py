@@ -29,3 +29,19 @@ class ProductService:
     async def detail(self, product_id: str):
         # Details, specifications and stock are always fetched live.
         return await self.client.get_product_detail(product_id)
+
+    async def browse(self, page: int):
+        result = await self.client.get_products(page)
+        # EKT can repeat page one beyond its range instead of returning empty.
+        if page > 1 and result.products:
+            first = await self.client.get_products(1)
+            if [p.id for p in result.products] == [p.id for p in first.products]:
+                result.products = []
+                result.has_next = False
+        async def refresh(product):
+            try:
+                return await self.detail(product.id)
+            except AppError:
+                return product
+        result.products = list(await asyncio.gather(*(refresh(p) for p in result.products[:5]))) + result.products[5:]
+        return result

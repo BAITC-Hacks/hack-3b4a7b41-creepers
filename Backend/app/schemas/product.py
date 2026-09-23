@@ -22,6 +22,7 @@ class Product(BaseModel):
     currency: str | None = None
     stock: Decimal | None = Field(default=None, ge=0)
     data_warnings: list[str] = Field(default_factory=list)
+    source: Literal["ekt_catalog", "demo_catalog"] = "ekt_catalog"
 
     @computed_field
     @property

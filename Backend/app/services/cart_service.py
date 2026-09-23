@@ -56,8 +56,10 @@ class CartService:
         try:
             self.stock.ensure_available(product, pending.quantity)
             self.stock.ensure_available(product, quantity)
-        except AppError:
+        except AppError as exc:
             session.pending_cart_action = None
+            if exc.code == "insufficient_stock" and product.stock != pending.current_stock:
+                raise AppError("insufficient_stock", f"Остаток изменился. Сейчас доступно только {product.stock} шт. С учётом вашей корзины добавление невозможно.", 409) from None
             raise
         # No await between mutation and clearing the pending action.
         session.cart[product.id] = CartItem(product=product, quantity=quantity)

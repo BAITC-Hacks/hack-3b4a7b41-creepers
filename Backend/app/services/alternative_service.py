@@ -45,6 +45,17 @@ def similarity(source: Product, candidate: Product, *, require_stock: bool = Tru
     if same_rating:
         reason += "; совпадает указанный номинальный ток"
     reason += ". Полная взаимозаменяемость не подтверждена."
+    differences = []
+    brand_a, brand_b = source.specifications.get("Торговая марка"), candidate.specifications.get("Торговая марка")
+    if brand_a and brand_b and brand_a != brand_b:
+        differences.append(f"производитель: {brand_a} → {brand_b}")
+    if source.price is not None and candidate.price is not None and source.price != candidate.price:
+        if source.currency and source.currency == candidate.currency:
+            differences.append(f"цена: {source.price} → {candidate.price} {source.currency}")
+        else:
+            differences.append("указанные цены различаются; валюта не подтверждена для сравнения")
+    if differences:
+        reason += " Отличия: " + "; ".join(differences) + "."
     return score, reason
 
 

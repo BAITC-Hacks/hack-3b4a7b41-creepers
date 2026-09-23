@@ -8,6 +8,7 @@ from app.config import Settings
 from app.core.errors import AppError
 from app.schemas.cart import CartItem
 from app.schemas.product import Product
+from app.schemas.procurement import ProcurementReport
 
 
 @dataclass
@@ -30,6 +31,10 @@ class Session:
     touched_at: float = field(default_factory=time.monotonic)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     users: int = 0
+    last_query: str = ""
+    language: str = "ru"
+    procurement: ProcurementReport | None = None
+    photo_candidates: list[Product] = field(default_factory=list)
 
 
 class SessionService:
